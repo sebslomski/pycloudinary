@@ -17,6 +17,10 @@ CLOUDINARY_FIELD_DB_RE = r'(?:(?P<resource_type>image|raw|video)/' \
                          r'(?P<public_id>.*?)' \
                          r'(\.(?P<format>[^.]+))?$'
 
+ALLOWED_UPLOAD_PARAMETERS = [
+    'folder',
+    'tags',
+]
 
 def with_metaclass(meta, *bases):
     """
@@ -45,6 +49,7 @@ class CloudinaryField(models.Field):
         self.resource_type = options.pop("resource_type", "image")
         self.width_field = options.pop("width_field", None)
         self.height_field = options.pop("height_field", None)
+        self.options = options
         super(CloudinaryField, self).__init__(*args, **options)
 
     def get_internal_type(self):
@@ -100,12 +105,24 @@ class CloudinaryField(models.Field):
         return self.upload_options(model_instance)
 
     def upload_options(self, model_instance):
-        return {}
+        """
+        Builds the parameters for the cloudinary `uploader.upload_resource` function.
+        TODO: We could do type checking here to assure that all provided parameters are
+        in their required type.
+        """
+        return dict([
+            (key, value)
+            for key, value in options.items()
+            if key in ALLOWED_UPLOAD_PARAMETERS
+        ])
 
     def pre_save(self, model_instance, add):
         value = super(CloudinaryField, self).pre_save(model_instance, add)
         if isinstance(value, UploadedFile):
-            options = {"type": self.type, "resource_type": self.resource_type}
+            options = {
+                "type": self.type,
+                "resource_type": self.resource_type,
+            }
             options.update(self.upload_options_with_filename(model_instance, value.name))
             instance_value = uploader.upload_resource(value, **options)
             setattr(model_instance, self.attname, instance_value)
